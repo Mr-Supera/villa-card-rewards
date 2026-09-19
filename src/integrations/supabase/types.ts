@@ -14,16 +14,310 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clientes: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          data_nascimento: string | null
+          email: string | null
+          id: string
+          nfc_uid: string | null
+          nivel_fidelidade_id: string | null
+          nome_completo: string
+          saldo: number
+          telefone: string | null
+          total_recarregado: number
+          user_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          data_nascimento?: string | null
+          email?: string | null
+          id?: string
+          nfc_uid?: string | null
+          nivel_fidelidade_id?: string | null
+          nome_completo: string
+          saldo?: number
+          telefone?: string | null
+          total_recarregado?: number
+          user_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          data_nascimento?: string | null
+          email?: string | null
+          id?: string
+          nfc_uid?: string | null
+          nivel_fidelidade_id?: string | null
+          nome_completo?: string
+          saldo?: number
+          telefone?: string | null
+          total_recarregado?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_nivel_fidelidade_id_fkey"
+            columns: ["nivel_fidelidade_id"]
+            isOneToOne: false
+            referencedRelation: "niveis_fidelidade"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      niveis_fidelidade: {
+        Row: {
+          beneficios: string
+          cor_badge: string
+          criado_em: string
+          id: string
+          nome: string
+          ordem: number
+          percentagem_desconto: number
+          saldo_minimo_acumulado: number
+        }
+        Insert: {
+          beneficios?: string
+          cor_badge?: string
+          criado_em?: string
+          id?: string
+          nome: string
+          ordem?: number
+          percentagem_desconto?: number
+          saldo_minimo_acumulado?: number
+        }
+        Update: {
+          beneficios?: string
+          cor_badge?: string
+          criado_em?: string
+          id?: string
+          nome?: string
+          ordem?: number
+          percentagem_desconto?: number
+          saldo_minimo_acumulado?: number
+        }
+        Relationships: []
+      }
+      pedidos_recarga: {
+        Row: {
+          cliente_id: string
+          criado_em: string
+          id: string
+          metodo_preferido:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por: string | null
+          status: Database["public"]["Enums"]["status_pedido"]
+          valor_solicitado: number
+        }
+        Insert: {
+          cliente_id: string
+          criado_em?: string
+          id?: string
+          metodo_preferido?:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por?: string | null
+          status?: Database["public"]["Enums"]["status_pedido"]
+          valor_solicitado: number
+        }
+        Update: {
+          cliente_id?: string
+          criado_em?: string
+          id?: string
+          metodo_preferido?:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por?: string | null
+          status?: Database["public"]["Enums"]["status_pedido"]
+          valor_solicitado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_recarga_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_recarga_processado_por_fkey"
+            columns: ["processado_por"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff: {
+        Row: {
+          ativo: boolean
+          cargo: Database["public"]["Enums"]["cargo_staff"]
+          criado_em: string
+          email: string
+          id: string
+          nome_completo: string
+          user_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          cargo?: Database["public"]["Enums"]["cargo_staff"]
+          criado_em?: string
+          email: string
+          id?: string
+          nome_completo: string
+          user_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          cargo?: Database["public"]["Enums"]["cargo_staff"]
+          criado_em?: string
+          email?: string
+          id?: string
+          nome_completo?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      transacoes: {
+        Row: {
+          cliente_id: string
+          criado_em: string
+          desconto_aplicado: number
+          descricao: string
+          id: string
+          metodo_pagamento:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por: string | null
+          saldo_resultante: number
+          tipo: Database["public"]["Enums"]["tipo_transacao"]
+          valor: number
+          valor_bruto: number | null
+        }
+        Insert: {
+          cliente_id: string
+          criado_em?: string
+          desconto_aplicado?: number
+          descricao?: string
+          id?: string
+          metodo_pagamento?:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por?: string | null
+          saldo_resultante: number
+          tipo: Database["public"]["Enums"]["tipo_transacao"]
+          valor: number
+          valor_bruto?: number | null
+        }
+        Update: {
+          cliente_id?: string
+          criado_em?: string
+          desconto_aplicado?: number
+          descricao?: string
+          id?: string
+          metodo_pagamento?:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por?: string | null
+          saldo_resultante?: number
+          tipo?: Database["public"]["Enums"]["tipo_transacao"]
+          valor?: number
+          valor_bruto?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transacoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transacoes_processado_por_fkey"
+            columns: ["processado_por"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      atribuir_nivel: { Args: { _cliente_id: string }; Returns: undefined }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
+      meu_cliente_id: { Args: never; Returns: string }
+      meu_staff_id: { Args: never; Returns: string }
+      registar_debito: {
+        Args: { _cliente_id: string; _descricao?: string; _valor_bruto: number }
+        Returns: {
+          cliente_id: string
+          criado_em: string
+          desconto_aplicado: number
+          descricao: string
+          id: string
+          metodo_pagamento:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por: string | null
+          saldo_resultante: number
+          tipo: Database["public"]["Enums"]["tipo_transacao"]
+          valor: number
+          valor_bruto: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      registar_recarga: {
+        Args: {
+          _cliente_id: string
+          _descricao?: string
+          _metodo: Database["public"]["Enums"]["metodo_pagamento"]
+          _valor: number
+        }
+        Returns: {
+          cliente_id: string
+          criado_em: string
+          desconto_aplicado: number
+          descricao: string
+          id: string
+          metodo_pagamento:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por: string | null
+          saldo_resultante: number
+          tipo: Database["public"]["Enums"]["tipo_transacao"]
+          valor: number
+          valor_bruto: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
-      [_ in never]: never
+      cargo_staff: "operador" | "administrador"
+      metodo_pagamento:
+        | "numerario"
+        | "mpesa"
+        | "emola"
+        | "cartao"
+        | "transferencia"
+      status_pedido: "pendente" | "confirmado" | "rejeitado"
+      tipo_transacao: "recarga" | "debito" | "estorno"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +444,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      cargo_staff: ["operador", "administrador"],
+      metodo_pagamento: [
+        "numerario",
+        "mpesa",
+        "emola",
+        "cartao",
+        "transferencia",
+      ],
+      status_pedido: ["pendente", "confirmado", "rejeitado"],
+      tipo_transacao: ["recarga", "debito", "estorno"],
+    },
   },
 } as const
