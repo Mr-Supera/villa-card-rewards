@@ -6,8 +6,8 @@ export function NivelBadge({
   desconto,
 }: {
   nome: string | null | undefined;
-  cor?: string | null;
-  desconto?: number | string | null;
+  cor?: string | null | undefined;
+  desconto?: number | string | null | undefined;
 }) {
   const corFinal = cor ?? "#d4af37";
   return (
