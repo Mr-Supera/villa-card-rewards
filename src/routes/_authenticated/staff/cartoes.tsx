@@ -5,169 +5,21 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LeitorCartao } from "@/components/LeitorCartao";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatMZN } from "@/lib/format";
+import { CreditCard, Lock, Search, Unlock, UserPlus } from "lucide-react";
 import { useStaff } from "./route";
-import { CreditCard } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/staff/cartoes")({
-  head: () => ({
-    meta: [
-      { title: "Associar cartões NFC · Villa Card" },
-      {
-        name: "description",
-        content: "Associação de cartões físicos NFC às contas dos clientes do resort.",
-      },
-      { property: "og:title", content: "Associar cartões NFC · Villa Card" },
-      {
-        property: "og:description",
-        content: "Associação de cartões físicos NFC às contas dos clientes do resort.",
-      },
-    ],
-  }),
-  component: Cartoes,
-});
+export const Route=createFileRoute("/_authenticated/staff/cartoes")({head:()=>({meta:[{title:"Gestão de cartões · Villa Card Rewards"}]}),component:Cartoes});
 
-function Cartoes() {
-  const queryClient = useQueryClient();
-  const { data: staff } = useStaff();
-  const [procura, setProcura] = useState("");
-  const [seleccionado, setSeleccionado] = useState<string | null>(null);
-  const [uid, setUid] = useState<string | null>(null);
-
-  const clientes = useQuery({
-    queryKey: ["clientes-admin"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("id, nome_completo, telefone, saldo, nfc_uid, ativo")
-        .order("nome_completo");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const lista = useMemo(() => {
-    const termo = procura.trim().toLowerCase();
-    return (clientes.data ?? []).filter(
-      (c) =>
-        !termo ||
-        c.nome_completo.toLowerCase().includes(termo) ||
-        (c.telefone ?? "").includes(termo),
-    );
-  }, [clientes.data, procura]);
-
-  const cliente = lista.find((c) => c.id === seleccionado) ?? null;
-
-  const associar = useMutation({
-    mutationFn: async () => {
-      if (!cliente || !uid) throw new Error("Seleccione um cliente e leia um cartão.");
-      const normalizado = uid.toUpperCase();
-      const { data: existente, error: erroProcura } = await supabase
-        .from("clientes")
-        .select("id, nome_completo")
-        .eq("nfc_uid", normalizado)
-        .maybeSingle();
-      if (erroProcura) throw erroProcura;
-      if (existente && existente.id !== cliente.id) {
-        throw new Error(`Este cartão já está associado a ${existente.nome_completo}.`);
-      }
-      const { error } = await supabase
-        .from("clientes")
-        .update({ nfc_uid: normalizado })
-        .eq("id", cliente.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Cartão associado com sucesso");
-      setUid(null);
-      queryClient.invalidateQueries({ queryKey: ["clientes-admin"] });
-    },
-    onError: (e: Error) => toast.error("Associação não concluída", { description: e.message }),
-  });
-
-  if (staff && staff.cargo !== "administrador") {
-    return (
-      <p className="mt-10 rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
-        Apenas administradores podem associar cartões.
-      </p>
-    );
-  }
-
-  return (
-    <main className="mt-6 grid gap-6 md:grid-cols-2">
-      <section>
-        <h2 className="text-xl">1. Escolher o cliente</h2>
-        <Input
-          className="mt-3"
-          placeholder="Procurar por nome ou telefone"
-          value={procura}
-          onChange={(e) => setProcura(e.target.value)}
-        />
-        <ul className="mt-4 max-h-[26rem] space-y-2 overflow-y-auto pr-1">
-          {lista.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                onClick={() => setSeleccionado(c.id)}
-                className={`w-full rounded-2xl border p-4 text-left transition-colors ${
-                  seleccionado === c.id
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card/60 hover:bg-card"
-                }`}
-              >
-                <p className="text-sm">{c.nome_completo}</p>
-                <p className="text-xs text-muted-foreground">
-                  {c.telefone ?? "Sem telefone"} · {formatMZN(c.saldo)} ·{" "}
-                  {c.nfc_uid ? `Cartão ${c.nfc_uid}` : "Sem cartão"}
-                </p>
-              </button>
-            </li>
-          ))}
-          {!lista.length && (
-            <li className="rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
-              Nenhum cliente encontrado.
-            </li>
-          )}
-        </ul>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-xl">2. Associar o cartão</h2>
-        {cliente ? (
-          <>
-            <LeitorCartao
-              comQR={false}
-              titulo="Aproximar cartão do leitor"
-              descricao={`Cartão a associar a ${cliente.nome_completo}.`}
-              onLeitura={(l) => setUid(l.valor.toUpperCase())}
-            />
-            <div className="rounded-2xl border border-border p-4">
-              <p className="text-sm text-muted-foreground">
-                UID lido:{" "}
-                <span className="text-foreground">{uid ?? "— aguardando leitura —"}</span>
-              </p>
-              {cliente.nfc_uid && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Cliente já tem o cartão {cliente.nfc_uid}. Confirmar substitui-o.
-                </p>
-              )}
-              <Button
-                className="surface-gold mt-4 w-full"
-                disabled={!uid || associar.isPending}
-                onClick={() => associar.mutate()}
-              >
-                <CreditCard className="size-4" />
-                {associar.isPending ? "A associar…" : "Confirmar associação"}
-              </Button>
-            </div>
-          </>
-        ) : (
-          <p className="rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
-            Seleccione primeiro um cliente na lista.
-          </p>
-        )}
-      </section>
-    </main>
-  );
+function Cartoes(){
+ const {data:staff}=useStaff();const qc=useQueryClient();const [busca,setBusca]=useState("");const [cliente,setCliente]=useState("");const [codigo,setCodigo]=useState("");const [nome,setNome]=useState("");const [contacto,setContacto]=useState("");const [email,setEmail]=useState("");
+ const clientes=useQuery({queryKey:["cards-clientes"],queryFn:async()=>{const {data,error}=await supabase.from("clientes").select("id,nome,contacto,email,saldo_atual,tier,cartao_nfc_id").order("nome");if(error)throw error;return data;}});
+ const cards=useQuery({queryKey:["cards-all"],queryFn:async()=>{const {data,error}=await supabase.from("cartoes").select("*").order("data_emissao",{ascending:false});if(error)throw error;return data;}});
+ const lista=useMemo(()=>{const q=busca.toLowerCase();return (clientes.data??[]).filter(c=>!q||c.nome.toLowerCase().includes(q)||(c.contacto??"").includes(q)||(c.email??"").toLowerCase().includes(q));},[clientes.data,busca]);
+ const emitir=useMutation({mutationFn:async()=>{let id=cliente;if(!id){const {data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("Sessão inválida");if(!nome)throw new Error("Informe o nome do novo cliente.");const {data,error}=await supabase.from("clientes").insert({id:auth.user.id,nome,contacto:contacto||null,email:email||null}).select("id").single();if(error)throw error;id=data.id}if(!codigo.trim())throw new Error("Informe o código NFC.");const {data:exists}=await supabase.from("cartoes").select("id").eq("codigo_nfc",codigo.trim().toUpperCase()).maybeSingle();if(exists)throw new Error("Código NFC já utilizado.");const {data:c,error}=await supabase.from("cartoes").insert({cliente_id:id,codigo_nfc:codigo.trim().toUpperCase(),estado:"ativo"}).select().single();if(error)throw error;const {error:ue}=await supabase.from("clientes").update({cartao_nfc_id:c.id}).eq("id",id);if(ue)throw ue;},onSuccess:()=>{toast.success("Cartão emitido e associado.");setCodigo("");setNome("");setContacto("");setEmail("");setCliente("");qc.invalidateQueries({queryKey:["cards-clientes"]});qc.invalidateQueries({queryKey:["cards-all"]});},onError:e=>toast.error("Não foi possível emitir o cartão",{description:e.message})});
+ const estado=useMutation({mutationFn:async({id,estado}:{id:string;estado:string})=>{const {error}=await supabase.from("cartoes").update({estado}).eq("id",id);if(error)throw error;},onSuccess:()=>{toast.success("Estado do cartão actualizado.");qc.invalidateQueries({queryKey:["cards-all"]});},onError:e=>toast.error("Não foi possível actualizar",{description:e.message})});
+ if(!staff)return null;
+ return <main className="mt-6 space-y-6"><section className="card-premium rounded-3xl p-5"><div className="flex items-center gap-2"><UserPlus className="size-5 text-primary"/><div><h2 className="text-xl">Emitir novo cartão</h2><p className="text-sm text-muted-foreground">Associe um código NFC a um cliente existente ou crie um novo cliente.</p></div></div><div className="mt-5 grid gap-3 md:grid-cols-2"><div className="space-y-2 md:col-span-2"><Input placeholder="Pesquisar cliente existente" value={busca} onChange={e=>setBusca(e.target.value)}/>{busca&&<div className="max-h-36 overflow-y-auto rounded-xl border border-border">{lista.slice(0,8).map(c=><button key={c.id} className={`block w-full p-3 text-left text-sm hover:bg-secondary ${cliente===c.id?"bg-primary/10":""}`} onClick={()=>{setCliente(c.id);setBusca(c.nome)}}>{c.nome} · {c.contacto??"sem contacto"} · {c.tier}</button>)}</div>}</div><Input placeholder="Código NFC" value={codigo} onChange={e=>setCodigo(e.target.value)}/><div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">{cliente?"Cliente seleccionado.":"Se não seleccionar cliente, preencha os dados abaixo para criar um perfil."}</div>{!cliente&&<><Input placeholder="Nome do novo cliente" value={nome} onChange={e=>setNome(e.target.value)}/><Input placeholder="Contacto" value={contacto} onChange={e=>setContacto(e.target.value)}/><Input placeholder="Email" type="email" value={email} onChange={e=>setEmail(e.target.value)}/></>}</div><Button className="surface-gold mt-4 w-full" disabled={emitir.isPending} onClick={()=>emitir.mutate()}><CreditCard className="mr-2 size-4"/>{emitir.isPending?"A emitir…":"Emitir e associar cartão"}</Button></section>
+ <section><div className="flex items-center gap-2"><Search className="size-5 text-primary"/><h2 className="text-xl">Cartões emitidos</h2></div><div className="mt-4 grid gap-3">{(cards.data??[]).map(c=>{const cli=(clientes.data??[]).find(x=>x.id===c.cliente_id);return <div key={c.id} className="card-premium flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{cli?.nome??"Cliente"}</p><p className="text-xs text-muted-foreground">{c.codigo_nfc} · {cli?formatMZN(cli.saldo_atual):"—"} · emitido {new Date(c.data_emissao).toLocaleDateString("pt-PT")}</p></div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-secondary px-3 py-1 text-xs">{c.estado}</span>{c.estado==="ativo"?<Button size="sm" variant="outline" onClick={()=>estado.mutate({id:c.id,estado:"bloqueado"})}><Lock className="mr-1 size-4"/>Bloquear</Button>:<Button size="sm" variant="outline" onClick={()=>estado.mutate({id:c.id,estado:"ativo"})}><Unlock className="mr-1 size-4"/>Desbloquear</Button>}{c.estado!=="perdido"&&<Button size="sm" variant="outline" onClick={()=>estado.mutate({id:c.id,estado:"perdido"})}>Reportar perdido</Button>}</div></div>})}</div></section></main>
 }
