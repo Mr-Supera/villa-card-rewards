@@ -49,47 +49,78 @@ export type Database = {
       clientes: {
         Row: {
           ativo: boolean
+          auth_user_id: string | null
+          cartao_nfc_id: string | null
+          contacto: string | null
           criado_em: string
           data_nascimento: string | null
+          data_registo: string
           email: string | null
+          email_contacto: string | null
           id: string
           nfc_uid: string | null
           nivel_fidelidade_id: string | null
+          nome: string | null
           nome_completo: string
           saldo: number
+          saldo_atual: number
           telefone: string | null
+          tier: string
           total_recarregado: number
           user_id: string | null
         }
         Insert: {
           ativo?: boolean
+          auth_user_id?: string | null
+          cartao_nfc_id?: string | null
+          contacto?: string | null
           criado_em?: string
           data_nascimento?: string | null
+          data_registo?: string
           email?: string | null
+          email_contacto?: string | null
           id?: string
           nfc_uid?: string | null
           nivel_fidelidade_id?: string | null
-          nome_completo: string
+          nome?: string | null
+          nome_completo?: string
           saldo?: number
+          saldo_atual?: number
           telefone?: string | null
+          tier?: string
           total_recarregado?: number
           user_id?: string | null
         }
         Update: {
           ativo?: boolean
+          auth_user_id?: string | null
+          cartao_nfc_id?: string | null
+          contacto?: string | null
           criado_em?: string
           data_nascimento?: string | null
+          data_registo?: string
           email?: string | null
+          email_contacto?: string | null
           id?: string
           nfc_uid?: string | null
           nivel_fidelidade_id?: string | null
+          nome?: string | null
           nome_completo?: string
           saldo?: number
+          saldo_atual?: number
           telefone?: string | null
+          tier?: string
           total_recarregado?: number
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "clientes_cartao_nfc_id_fkey"
+            columns: ["cartao_nfc_id"]
+            isOneToOne: false
+            referencedRelation: "cartoes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clientes_nivel_fidelidade_id_fkey"
             columns: ["nivel_fidelidade_id"]
@@ -101,9 +132,12 @@ export type Database = {
       }
       niveis_fidelidade: {
         Row: {
+          ativo: boolean
           beneficios: string
           cor_badge: string
           criado_em: string
+          desconto_percentual: number
+          descricao: string | null
           id: string
           nome: string
           ordem: number
@@ -111,9 +145,12 @@ export type Database = {
           saldo_minimo_acumulado: number
         }
         Insert: {
+          ativo?: boolean
           beneficios?: string
           cor_badge?: string
           criado_em?: string
+          desconto_percentual?: number
+          descricao?: string | null
           id?: string
           nome: string
           ordem?: number
@@ -121,9 +158,12 @@ export type Database = {
           saldo_minimo_acumulado?: number
         }
         Update: {
+          ativo?: boolean
           beneficios?: string
           cor_badge?: string
           criado_em?: string
+          desconto_percentual?: number
+          descricao?: string | null
           id?: string
           nome?: string
           ordem?: number
@@ -190,7 +230,9 @@ export type Database = {
           criado_em: string
           email: string
           id: string
+          nome: string | null
           nome_completo: string
+          role: string
           user_id: string | null
         }
         Insert: {
@@ -199,7 +241,9 @@ export type Database = {
           criado_em?: string
           email: string
           id?: string
-          nome_completo: string
+          nome?: string | null
+          nome_completo?: string
+          role?: string
           user_id?: string | null
         }
         Update: {
@@ -208,7 +252,9 @@ export type Database = {
           criado_em?: string
           email?: string
           id?: string
+          nome?: string | null
           nome_completo?: string
+          role?: string
           user_id?: string | null
         }
         Relationships: []
@@ -224,7 +270,10 @@ export type Database = {
             | Database["public"]["Enums"]["metodo_pagamento"]
             | null
           processado_por: string | null
+          saldo_apos: number | null
           saldo_resultante: number
+          staff_id: string | null
+          timestamp: string
           tipo: Database["public"]["Enums"]["tipo_transacao"]
           valor: number
           valor_bruto: number | null
@@ -239,7 +288,10 @@ export type Database = {
             | Database["public"]["Enums"]["metodo_pagamento"]
             | null
           processado_por?: string | null
-          saldo_resultante: number
+          saldo_apos?: number | null
+          saldo_resultante?: number
+          staff_id?: string | null
+          timestamp?: string
           tipo: Database["public"]["Enums"]["tipo_transacao"]
           valor: number
           valor_bruto?: number | null
@@ -254,7 +306,10 @@ export type Database = {
             | Database["public"]["Enums"]["metodo_pagamento"]
             | null
           processado_por?: string | null
+          saldo_apos?: number | null
           saldo_resultante?: number
+          staff_id?: string | null
+          timestamp?: string
           tipo?: Database["public"]["Enums"]["tipo_transacao"]
           valor?: number
           valor_bruto?: number | null
@@ -284,6 +339,7 @@ export type Database = {
           id: string
           nivel_minimo_id: string | null
           nome: string
+          tier_minimo: string
           tipo_desconto: string
           valor_desconto: number
         }
@@ -294,6 +350,7 @@ export type Database = {
           id?: string
           nivel_minimo_id?: string | null
           nome: string
+          tier_minimo?: string
           tipo_desconto?: string
           valor_desconto?: number
         }
@@ -304,6 +361,7 @@ export type Database = {
           id?: string
           nivel_minimo_id?: string | null
           nome?: string
+          tier_minimo?: string
           tipo_desconto?: string
           valor_desconto?: number
         }
@@ -327,6 +385,33 @@ export type Database = {
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       meu_cliente_id: { Args: never; Returns: string }
       meu_staff_id: { Args: never; Returns: string }
+      registar_consumo: {
+        Args: { _cliente_id: string; _descricao?: string; _valor_bruto: number }
+        Returns: {
+          cliente_id: string
+          criado_em: string
+          desconto_aplicado: number
+          descricao: string
+          id: string
+          metodo_pagamento:
+            | Database["public"]["Enums"]["metodo_pagamento"]
+            | null
+          processado_por: string | null
+          saldo_apos: number | null
+          saldo_resultante: number
+          staff_id: string | null
+          timestamp: string
+          tipo: Database["public"]["Enums"]["tipo_transacao"]
+          valor: number
+          valor_bruto: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       registar_debito: {
         Args: { _cliente_id: string; _descricao?: string; _valor_bruto: number }
         Returns: {
@@ -339,7 +424,10 @@ export type Database = {
             | Database["public"]["Enums"]["metodo_pagamento"]
             | null
           processado_por: string | null
+          saldo_apos: number | null
           saldo_resultante: number
+          staff_id: string | null
+          timestamp: string
           tipo: Database["public"]["Enums"]["tipo_transacao"]
           valor: number
           valor_bruto: number | null
@@ -351,35 +439,66 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      registar_recarga: {
-        Args: {
-          _cliente_id: string
-          _descricao?: string
-          _metodo: Database["public"]["Enums"]["metodo_pagamento"]
-          _valor: number
-        }
-        Returns: {
-          cliente_id: string
-          criado_em: string
-          desconto_aplicado: number
-          descricao: string
-          id: string
-          metodo_pagamento:
-            | Database["public"]["Enums"]["metodo_pagamento"]
-            | null
-          processado_por: string | null
-          saldo_resultante: number
-          tipo: Database["public"]["Enums"]["tipo_transacao"]
-          valor: number
-          valor_bruto: number | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "transacoes"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      registar_recarga:
+        | {
+            Args: { _cliente_id: string; _descricao?: string; _valor: number }
+            Returns: {
+              cliente_id: string
+              criado_em: string
+              desconto_aplicado: number
+              descricao: string
+              id: string
+              metodo_pagamento:
+                | Database["public"]["Enums"]["metodo_pagamento"]
+                | null
+              processado_por: string | null
+              saldo_apos: number | null
+              saldo_resultante: number
+              staff_id: string | null
+              timestamp: string
+              tipo: Database["public"]["Enums"]["tipo_transacao"]
+              valor: number
+              valor_bruto: number | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "transacoes"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _cliente_id: string
+              _descricao?: string
+              _metodo: Database["public"]["Enums"]["metodo_pagamento"]
+              _valor: number
+            }
+            Returns: {
+              cliente_id: string
+              criado_em: string
+              desconto_aplicado: number
+              descricao: string
+              id: string
+              metodo_pagamento:
+                | Database["public"]["Enums"]["metodo_pagamento"]
+                | null
+              processado_por: string | null
+              saldo_apos: number | null
+              saldo_resultante: number
+              staff_id: string | null
+              timestamp: string
+              tipo: Database["public"]["Enums"]["tipo_transacao"]
+              valor: number
+              valor_bruto: number | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "transacoes"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
     }
     Enums: {
       cargo_staff: "operador" | "administrador"
@@ -390,7 +509,7 @@ export type Database = {
         | "cartao"
         | "transferencia"
       status_pedido: "pendente" | "confirmado" | "rejeitado"
-      tipo_transacao: "recarga" | "debito" | "estorno"
+      tipo_transacao: "recarga" | "debito" | "estorno" | "consumo" | "desconto"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -527,7 +646,7 @@ export const Constants = {
         "transferencia",
       ],
       status_pedido: ["pendente", "confirmado", "rejeitado"],
-      tipo_transacao: ["recarga", "debito", "estorno"],
+      tipo_transacao: ["recarga", "debito", "estorno", "consumo", "desconto"],
     },
   },
 } as const

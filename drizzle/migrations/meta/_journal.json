@@ -15,6 +15,13 @@
       "when": 1789994867665,
       "tag": "0001_cartoes_vantagens",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789994977603,
+      "tag": "0002_alinhar_esquema_villa_card",
+      "breakpoints": true
     }
   ]
 }
