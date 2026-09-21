@@ -20,7 +20,7 @@ type Vantagem={id:string;nome:string;descricao:string|null;tier_minimo:string;ti
 type Nivel={id:string;nome:string;ordem:number;desconto_percentual:number;descricao:string|null;ativo:boolean};
 
 function StaffDashboard(){
- const {data:staff}=useStaff(); const qc=useQueryClient(); const [busca,setBusca]=useState(""); const [clienteId,setClienteId]=useState<string|null>(null);
+ const {data:staff}=useStaff(); const qc=useQueryClient(); const [busca,setBusca]=useState(""); const [clienteId,setClienteId]=useState<string|null>(null); const [tierAlert,setTierAlert]=useState<string|null>(null);
  const clientes=useQuery({queryKey:["admin-clientes"],queryFn:async()=>{const {data,error}=await supabase.from("clientes").select("*").order("nome");if(error)throw error;return data as Cliente[];}});
  const cartoes=useQuery({queryKey:["admin-cartoes"],queryFn:async()=>{const {data,error}=await supabase.from("cartoes").select("*").order("data_emissao",{ascending:false});if(error)throw error;return data as Cartao[];}});
  const tx=useQuery({queryKey:["admin-tx"],queryFn:async()=>{const {data,error}=await supabase.from("transacoes").select("*").order("timestamp",{ascending:false}).limit(500);if(error)throw error;return data as Tx[];}});
@@ -31,7 +31,7 @@ function StaffDashboard(){
  const lista=(clientes.data??[]).filter(c=>{const q=busca.toLowerCase().trim();return !q||c.nome.toLowerCase().includes(q)||(c.contacto??"").includes(q)||(c.email??"").toLowerCase().includes(q)});
  const selecionado=lista.find(c=>c.id===clienteId)??null;
  if(!staff)return null;
- return <main className="mt-6 space-y-8">
+ return <main className="mt-6 space-y-8">{tierAlert&&<div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm"><b>✨ Subida de tier:</b> {tierAlert}<button className="ml-3 underline" onClick={()=>setTierAlert(null)}>Fechar</button></div>}
    <section><div className="flex items-end justify-between"><div><p className="text-xs uppercase tracking-[0.25em] text-primary">Admin / Staff</p><h2 className="mt-1 text-2xl sm:text-3xl">Dashboard</h2></div><span className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-4 text-primary"/>Acesso protegido por Auth + RLS</span></div>
     <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">{[
       ["Cartões activos",String(metricas.cartoes),WalletCards],["Saldo em circulação",formatMZN(metricas.saldo),WalletCards],["Transações hoje",String(metricas.dia),ArrowUpRight],["Transações este mês",String(metricas.mes),ArrowDownLeft],["Novos clientes",String(metricas.novos),Users]
