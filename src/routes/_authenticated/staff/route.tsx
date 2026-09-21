@@ -27,7 +27,7 @@ function LayoutStaff() {
   async function sair() {
     await supabase.auth.signOut();
     queryClient.clear();
-    navigate({ to: "/auth", replace: true });
+    navigate({ to: "/admin/login", replace: true });
   }
 
   if (isLoading) return <div className="p-10 text-center text-muted-foreground">A verificar credenciais…</div>;
