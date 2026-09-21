@@ -1,482 +1,263 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import QRCode from "qrcode";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CreditCard,
+  LogOut,
+  Pencil,
+  Plus,
+  Sparkles,
+  WalletCards,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { NivelBadge } from "@/components/NivelBadge";
-import { formatData, formatMZN } from "@/lib/format";
-import { ArrowDownLeft, ArrowUpRight, CreditCard, LogOut, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatMZN } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
     meta: [
-      { title: "O meu Villa Card" },
-      {
-        name: "description",
-        content: "Saldo, nível de fidelidade, vantagens e histórico do seu Villa Card.",
-      },
-      { property: "og:title", content: "O meu Villa Card" },
-      {
-        property: "og:description",
-        content: "Saldo, nível de fidelidade, vantagens e histórico do seu Villa Card.",
-      },
+      { title: "Villa Card Rewards | Meu Cartão" },
+      { name: "description", content: "Saldo, cartão, vantagens, transações e perfil do Villa Card." },
     ],
   }),
   component: PainelCliente,
 });
 
-type Periodo = "7" | "30" | "90" | "todos";
+type Cliente = {
+  id: string;
+  nome: string;
+  contacto: string | null;
+  email: string | null;
+  data_registo: string;
+  cartao_nfc_id: string | null;
+  saldo_atual: number;
+  tier: string;
+};
+
+type Cartao = {
+  id: string;
+  cliente_id: string;
+  codigo_nfc: string;
+  estado: "ativo" | "bloqueado" | "perdido";
+  data_emissao: string;
+};
+
+type Transacao = {
+  id: string;
+  tipo: "recarga" | "consumo" | "desconto";
+  valor: number;
+  saldo_apos: number;
+  descricao: string | null;
+  timestamp: string;
+};
+
+type Vantagem = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tier_minimo: string;
+  tipo_desconto: string;
+  valor_desconto: number;
+};
+
+const tierRank: Record<string, number> = { bronze: 1, prata: 2, ouro: 3, platina: 4 };
 
 function PainelCliente() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [periodo, setPeriodo] = useState<Periodo>("30");
-  const [qr, setQr] = useState<string | null>(null);
+  const [periodo, setPeriodo] = useState("30");
+  const [tipo, setTipo] = useState("todos");
+  const [editar, setEditar] = useState(false);
 
   const clienteQuery = useQuery({
     queryKey: ["cliente"],
     queryFn: async () => {
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) throw new Error("Sessão inválida");
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("*, niveis_fidelidade(*)")
-        .eq("user_id", auth.user.id)
-        .maybeSingle();
+      if (!auth.user) throw new Error("Sessão inválida.");
+      const { data, error } = await supabase.from("clientes").select("*").eq("id", auth.user.id).single();
       if (error) throw error;
-      return data;
+      return data as Cliente;
     },
   });
 
   const cliente = clienteQuery.data;
-  const nivel = cliente?.niveis_fidelidade ?? null;
 
-  const niveisQuery = useQuery({
-    queryKey: ["niveis"],
+  const cartaoQuery = useQuery({
+    queryKey: ["cartao", cliente?.cartao_nfc_id],
+    enabled: !!cliente?.cartao_nfc_id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("niveis_fidelidade")
-        .select("*")
-        .order("saldo_minimo_acumulado", { ascending: true });
+      const { data, error } = await supabase.from("cartoes").select("*").eq("id", cliente!.cartao_nfc_id!).single();
       if (error) throw error;
-      return data;
+      return data as Cartao;
     },
   });
 
   const transacoesQuery = useQuery({
-    queryKey: ["transacoes", cliente?.id, periodo],
+    queryKey: ["transacoes", cliente?.id, periodo, tipo],
     enabled: !!cliente?.id,
     queryFn: async () => {
-      let q = supabase
-        .from("transacoes")
-        .select("*")
-        .eq("cliente_id", cliente!.id)
-        .order("criado_em", { ascending: false });
+      let query = supabase.from("transacoes").select("*").eq("cliente_id", cliente!.id).order("timestamp", { ascending: false });
       if (periodo !== "todos") {
-        const desde = new Date();
-        desde.setDate(desde.getDate() - Number(periodo));
-        q = q.gte("criado_em", desde.toISOString());
+        const date = new Date();
+        date.setDate(date.getDate() - Number(periodo));
+        query = query.gte("timestamp", date.toISOString());
       }
-      const { data, error } = await q;
+      if (tipo !== "todos") query = query.eq("tipo", tipo);
+      const { data, error } = await query.limit(100);
       if (error) throw error;
-      return data;
+      return (data ?? []) as Transacao[];
     },
   });
 
-  const pedidosQuery = useQuery({
-    queryKey: ["pedidos", cliente?.id],
-    enabled: !!cliente?.id,
+  const vantagensQuery = useQuery({
+    queryKey: ["vantagens", cliente?.tier],
+    enabled: !!cliente?.tier,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pedidos_recarga")
-        .select("*")
-        .eq("cliente_id", cliente!.id)
-        .order("criado_em", { ascending: false })
-        .limit(10);
+      const rank = tierRank[cliente!.tier.toLowerCase()] ?? 1;
+      const { data, error } = await supabase.from("vantagens").select("*");
       if (error) throw error;
-      return data;
+      return ((data ?? []) as Vantagem[]).filter((v) => (tierRank[v.tier_minimo.toLowerCase()] ?? 99) <= rank);
     },
   });
 
-  useEffect(() => {
-    if (!cliente?.id) return;
-    QRCode.toDataURL(cliente.id, {
-      width: 320,
-      margin: 1,
-      color: { dark: "#1b2c25", light: "#f3ead6" },
-    }).then(setQr);
-  }, [cliente?.id]);
-
-  const proximoNivel = useMemo(() => {
-    if (!cliente || !niveisQuery.data) return null;
-    const total = Number(cliente.total_recarregado);
-    return niveisQuery.data.find((n) => Number(n.saldo_minimo_acumulado) > total) ?? null;
-  }, [cliente, niveisQuery.data]);
-
-  async function sair() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
+  const sair = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  }
+    queryClient.clear();
+    window.location.href = "/auth";
+  };
 
   if (clienteQuery.isLoading) {
-    return <div className="p-10 text-center text-muted-foreground">A carregar o seu cartão…</div>;
+    return <main className="grid min-h-screen place-items-center p-6 text-muted-foreground">A carregar o seu Villa Card…</main>;
   }
 
-  if (!cliente) {
-    return (
-      <div className="mx-auto max-w-md p-10 text-center">
-        <h1 className="text-2xl">Conta sem perfil de cliente</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Esta conta não tem um perfil de cliente associado. Contacte a recepção do resort.
-        </p>
-        <Button className="mt-6" variant="outline" onClick={sair}>
-          Terminar sessão
-        </Button>
-      </div>
-    );
+  if (clienteQuery.error || !cliente) {
+    return <main className="mx-auto max-w-md p-8 text-center"><h1 className="text-2xl">Perfil não encontrado</h1><p className="mt-2 text-sm text-muted-foreground">Não foi possível carregar o perfil deste cliente.</p><Button className="mt-6" onClick={sair}>Terminar sessão</Button></main>;
   }
 
-  const beneficios = (nivel?.beneficios ?? "").split("\n").filter(Boolean);
+  const tier = cliente.tier.charAt(0).toUpperCase() + cliente.tier.slice(1);
+  const cardActive = cartaoQuery.data?.estado === "ativo";
 
   return (
-    <main className="mx-auto max-w-2xl px-4 pb-16 pt-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-[0.65rem] uppercase tracking-[0.35em] text-primary">
-            Villa das Palmeiras
-          </p>
-          <h1 className="text-2xl">Olá, {cliente.nome_completo.split(" ")[0]}</h1>
-        </div>
-        <Button variant="ghost" size="icon" onClick={sair} aria-label="Terminar sessão">
-          <LogOut className="size-5" />
-        </Button>
-      </header>
+    <main className="min-h-screen bg-background pb-24">
+      <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+        <header className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[0.65rem] font-medium uppercase tracking-[0.3em] text-primary">Villa das Palmeiras</p>
+            <h1 className="mt-1 text-2xl sm:text-3xl">Olá, {cliente.nome.split(" ")[0]}.</h1>
+          </div>
+          <Button variant="ghost" size="icon" onClick={sair} aria-label="Terminar sessão"><LogOut className="size-5" /></Button>
+        </header>
 
-      {/* CARTÃO */}
-      <section className="card-premium mt-6 rounded-3xl p-6">
-        <div className="flex items-start justify-between">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Saldo atual</p>
-          <NivelBadge
-            nome={nivel?.nome}
-            cor={nivel?.cor_badge}
-            desconto={nivel?.percentagem_desconto}
-          />
-        </div>
-        <p className="mt-3 text-5xl font-light text-gold-gradient sm:text-6xl">
-          {formatMZN(cliente.saldo)}
-        </p>
-        <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
-          <CreditCard className="size-4" />
-          {cliente.nfc_uid ? (
-            <span>Cartão NFC associado · {cliente.nfc_uid.slice(-6).toUpperCase()}</span>
-          ) : (
-            <span>Sem cartão físico associado — levante o seu na recepção</span>
-          )}
-        </div>
-        {proximoNivel && (
-          <p className="mt-4 text-xs text-muted-foreground">
-            Faltam {formatMZN(Number(proximoNivel.saldo_minimo_acumulado) - Number(cliente.total_recarregado))}{" "}
-            em recargas para atingir o nível {proximoNivel.nome}.
-          </p>
-        )}
-        <PedirRecarga clienteId={cliente.id} />
-      </section>
-
-      <Tabs defaultValue="historico" className="mt-8">
-        <TabsList className="grid w-full grid-cols-4 bg-secondary">
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
-          <TabsTrigger value="vantagens">Vantagens</TabsTrigger>
-          <TabsTrigger value="qr">QR</TabsTrigger>
-          <TabsTrigger value="perfil">Perfil</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="historico" className="mt-5 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl">Transações</h2>
-            <Select value={periodo} onValueChange={(v) => setPeriodo(v as Periodo)}>
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Últimos 7 dias</SelectItem>
-                <SelectItem value="30">Últimos 30 dias</SelectItem>
-                <SelectItem value="90">Últimos 90 dias</SelectItem>
-                <SelectItem value="todos">Tudo</SelectItem>
-              </SelectContent>
-            </Select>
+        <section className="mt-6 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
+          <div className="card-premium relative overflow-hidden rounded-[2rem] p-6 sm:p-8">
+            <div className="absolute -right-16 -top-16 size-44 rounded-full bg-primary/10 blur-2xl" />
+            <div className="relative">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Saldo disponível</p>
+                  <p className="mt-2 text-5xl font-light tracking-tight text-gold-gradient sm:text-6xl">{formatMZN(Number(cliente.saldo_atual))}</p>
+                </div>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">{tier}</span>
+              </div>
+              <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <Sparkles className="size-4 text-primary" />
+                <span>Benefícios disponíveis para o nível {tier}</span>
+              </div>
+              <Recarga clienteId={cliente.id} />
+            </div>
           </div>
 
-          {(pedidosQuery.data ?? []).filter((p) => p.status === "pendente").length > 0 && (
-            <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm">
-              Tem pedidos de recarga pendentes de confirmação na recepção.
+          <VirtualCard cliente={cliente} cartao={cartaoQuery.data} active={cardActive} />
+        </section>
+
+        <Tabs defaultValue="historico" className="mt-7">
+          <TabsList className="grid h-auto w-full grid-cols-3 bg-secondary p-1 sm:max-w-xl">
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+            <TabsTrigger value="vantagens">Vantagens</TabsTrigger>
+            <TabsTrigger value="perfil">Perfil</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="historico" className="mt-5">
+            <div className="card-premium rounded-3xl p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div><h2 className="text-xl">Movimentos</h2><p className="text-sm text-muted-foreground">Recargas e consumos do seu cartão.</p></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={periodo} onValueChange={setPeriodo}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="7">7 dias</SelectItem><SelectItem value="30">30 dias</SelectItem><SelectItem value="90">90 dias</SelectItem><SelectItem value="todos">Tudo</SelectItem></SelectContent></Select>
+                  <Select value={tipo} onValueChange={setTipo}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="recarga">Recargas</SelectItem><SelectItem value="consumo">Consumos</SelectItem><SelectItem value="desconto">Descontos</SelectItem></SelectContent></Select>
+                </div>
+              </div>
+              <div className="mt-5 space-y-2">
+                {transacoesQuery.data?.length ? transacoesQuery.data.map((t) => {
+                  const entrada = t.tipo === "recarga";
+                  return <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/50 p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className={`grid size-10 shrink-0 place-items-center rounded-full ${entrada ? "bg-success/15 text-success" : "bg-primary/10 text-primary"}`}>{entrada ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}</span>
+                      <div className="min-w-0"><p className="truncate text-sm font-medium">{t.descricao || (entrada ? "Recarga" : t.tipo === "desconto" ? "Desconto" : "Consumo")}</p><p className="text-xs text-muted-foreground">{new Date(t.timestamp).toLocaleString("pt-PT")}</p></div>
+                    </div>
+                    <div className="shrink-0 text-right"><p className={`text-sm font-medium ${entrada ? "text-success" : ""}`}>{entrada ? "+" : "−"} {formatMZN(Number(t.valor))}</p><p className="text-xs text-muted-foreground">Saldo {formatMZN(Number(t.saldo_apos))}</p></div>
+                  </div>;
+                }) : <p className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">Não existem transações neste período.</p>}
+              </div>
             </div>
-          )}
+          </TabsContent>
 
-          {transacoesQuery.data?.length ? (
-            <ul className="space-y-2">
-              {transacoesQuery.data.map((t) => {
-                const entrada = t.tipo === "recarga" || t.tipo === "estorno";
-                return (
-                  <li
-                    key={t.id}
-                    className="flex items-center justify-between rounded-2xl border border-border bg-card/60 p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`grid size-9 place-items-center rounded-full ${
-                          entrada ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
-                        }`}
-                      >
-                        {entrada ? (
-                          <ArrowDownLeft className="size-4" />
-                        ) : (
-                          <ArrowUpRight className="size-4" />
-                        )}
-                      </span>
-                      <div>
-                        <p className="text-sm">{t.descricao || (entrada ? "Recarga" : "Consumo")}</p>
-                        <p className="text-xs text-muted-foreground">{formatData(t.criado_em)}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-sm ${entrada ? "text-success" : "text-foreground"}`}>
-                        {entrada ? "+" : "−"} {formatMZN(t.valor)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Saldo: {formatMZN(t.saldo_resultante)}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
-              Ainda não há transações neste período.
-            </p>
-          )}
-        </TabsContent>
+          <TabsContent value="vantagens" className="mt-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(vantagensQuery.data ?? []).map((v) => <div key={v.id} className="card-premium rounded-3xl p-5"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary"><Sparkles className="size-5" /></span><div><h3 className="text-lg">{v.nome}</h3><p className="text-xs uppercase tracking-wider text-primary">{v.tipo_desconto}</p></div></div><p className="mt-4 text-sm text-muted-foreground">{v.descricao || "Benefício disponível para o seu nível."}</p><p className="mt-4 text-xl text-gold-gradient">{v.valor_desconto}%</p></div>)}
+              {!vantagensQuery.data?.length && <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground">Não há vantagens configuradas para o seu nível.</div>}
+            </div>
+          </TabsContent>
 
-        <TabsContent value="vantagens" className="mt-5">
-          <h2 className="text-xl">Minhas vantagens</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Nível {nivel?.nome ?? "—"} · {Number(nivel?.percentagem_desconto ?? 0)}% de desconto
-            aplicado automaticamente nos consumos.
-          </p>
-          <ul className="mt-4 space-y-2">
-            {beneficios.length ? (
-              beneficios.map((b) => (
-                <li key={b} className="rounded-2xl border border-border bg-card/60 p-4 text-sm">
-                  {b}
-                </li>
-              ))
-            ) : (
-              <li className="text-sm text-muted-foreground">Sem vantagens definidas.</li>
-            )}
-          </ul>
-        </TabsContent>
-
-        <TabsContent value="qr" className="mt-5 text-center">
-          <h2 className="text-xl">O meu QR pessoal</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Apresente este código ao balcão caso não tenha o cartão consigo.
-          </p>
-          {qr && (
-            <img
-              src={qr}
-              alt="Código QR pessoal"
-              width={320}
-              height={320}
-              className="mx-auto mt-6 w-64 rounded-3xl border border-primary/30 p-3"
-            />
-          )}
-          <p className="mt-4 text-xs text-muted-foreground">ID: {cliente.id}</p>
-        </TabsContent>
-
-        <TabsContent value="perfil" className="mt-5">
-          <PerfilForm cliente={cliente} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="perfil" className="mt-5">
+            <Perfil cliente={cliente} open={editar} setOpen={setEditar} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </main>
   );
 }
 
-function PedirRecarga({ clienteId }: { clienteId: string }) {
-  const queryClient = useQueryClient();
-  const [aberto, setAberto] = useState(false);
-  const [valor, setValor] = useState("");
-  const [metodo, setMetodo] = useState<string>("mpesa");
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("pedidos_recarga").insert({
-        cliente_id: clienteId,
-        valor_solicitado: Number(valor),
-        metodo_preferido: metodo as "mpesa",
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Pedido de recarga enviado", {
-        description: "Será confirmado pela equipa do resort.",
-      });
-      setAberto(false);
-      setValor("");
-      queryClient.invalidateQueries({ queryKey: ["pedidos"] });
-    },
-    onError: (e: Error) => toast.error("Não foi possível enviar o pedido", { description: e.message }),
-  });
-
-  return (
-    <Dialog open={aberto} onOpenChange={setAberto}>
-      <DialogTrigger asChild>
-        <Button className="surface-gold mt-6 w-full">
-          <Plus className="size-4" /> Pedir recarga
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Pedir recarga</DialogTitle>
-          <DialogDescription>
-            O pedido fica pendente até ser confirmado ao balcão do resort.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="valor">Valor (MZN)</Label>
-            <Input
-              id="valor"
-              type="number"
-              min="1"
-              step="0.01"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Método preferido</Label>
-            <Select value={metodo} onValueChange={setMetodo}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="numerario">Numerário</SelectItem>
-                <SelectItem value="mpesa">M-Pesa</SelectItem>
-                <SelectItem value="emola">e-Mola</SelectItem>
-                <SelectItem value="cartao">Cartão bancário</SelectItem>
-                <SelectItem value="transferencia">Transferência</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            className="surface-gold w-full"
-            disabled={!valor || Number(valor) <= 0 || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? "A enviar…" : "Enviar pedido"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+function VirtualCard({ cliente, cartao, active }: { cliente: Cliente; cartao?: Cartao; active: boolean }) {
+  return <div className="relative overflow-hidden rounded-[2rem] border border-primary/25 bg-gradient-to-br from-[#234701] via-[#183c12] to-[#102d1c] p-6 shadow-xl sm:p-7">
+    <div className="absolute -right-10 -top-10 size-36 rounded-full border border-primary/10" /><div className="absolute -bottom-20 -left-10 size-44 rounded-full bg-primary/10 blur-2xl" />
+    <div className="relative">
+      <div className="flex items-center justify-between"><p className="text-xs uppercase tracking-[0.3em] text-primary/90">Villa Card Rewards</p><WalletCards className="size-6 text-primary" /></div>
+      <div className="mt-9 h-11 w-14 rounded-xl border border-primary/40 bg-gradient-to-br from-primary/40 to-primary/10 shadow-inner"><div className="grid h-full place-items-center"><span className="size-7 rounded-md border border-primary/50" /></div></div>
+      <p className="mt-7 text-lg font-medium tracking-[0.12em] text-white">{cartao?.codigo_nfc ? `•••• •••• ${cartao.codigo_nfc.slice(-4).toUpperCase()}` : "CARTÃO NÃO ASSOCIADO"}</p>
+      <div className="mt-5 flex items-end justify-between"><div><p className="text-[0.6rem] uppercase text-white/50">Titular</p><p className="text-sm text-white">{cliente.nome}</p></div><span className={`rounded-full px-2.5 py-1 text-[0.65rem] uppercase ${active ? "bg-success/15 text-success" : "bg-white/10 text-white/60"}`}>{cartao?.estado ?? "sem cartão"}</span></div>
+    </div>
+  </div>;
 }
 
-type ClienteRow = {
-  id: string;
-  nome_completo: string;
-  telefone: string | null;
-  email: string | null;
-  data_nascimento: string | null;
-};
-
-function PerfilForm({ cliente }: { cliente: ClienteRow }) {
-  const queryClient = useQueryClient();
-  const [nome, setNome] = useState(cliente.nome_completo);
-  const [telefone, setTelefone] = useState(cliente.telefone ?? "");
-  const [nascimento, setNascimento] = useState(cliente.data_nascimento ?? "");
-
+function Recarga({ clienteId }: { clienteId: string }) {
+  const qc = useQueryClient(); const [open, setOpen] = useState(false); const [valor, setValor] = useState("");
   const mutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("clientes")
-        .update({
-          nome_completo: nome,
-          telefone: telefone || null,
-          data_nascimento: nascimento || null,
-        })
-        .eq("id", cliente.id);
-      if (error) throw error;
+      const amount = Number(valor);
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error("Introduza um valor válido.");
+      const { data: c, error: ce } = await supabase.from("clientes").select("saldo_atual").eq("id", clienteId).single();
+      if (ce) throw ce;
+      const novoSaldo = Number(c.saldo_atual) + amount;
+      const { error: ue } = await supabase.from("clientes").update({ saldo_atual: novoSaldo }).eq("id", clienteId);
+      if (ue) throw ue;
+      const { error: te } = await supabase.from("transacoes").insert({ cliente_id: clienteId, tipo: "recarga", valor: amount, saldo_apos: novoSaldo, descricao: "Recarga simulada" });
+      if (te) throw te;
     },
-    onSuccess: () => {
-      toast.success("Dados actualizados");
-      queryClient.invalidateQueries({ queryKey: ["cliente"] });
-    },
-    onError: (e: Error) => toast.error("Não foi possível guardar", { description: e.message }),
+    onSuccess: () => { toast.success("Recarga simulada com sucesso."); setValor(""); setOpen(false); qc.invalidateQueries({ queryKey: ["cliente"] }); qc.invalidateQueries({ queryKey: ["transacoes"] }); },
+    onError: (e: Error) => toast.error("Não foi possível recarregar", { description: e.message }),
   });
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button className="surface-gold mt-6 w-full sm:w-auto"><Plus className="size-4" /> Recarregar saldo</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Recarregar saldo</DialogTitle><DialogDescription>Simulação de pagamento. Nenhuma cobrança real será efectuada.</DialogDescription></DialogHeader><div className="space-y-2"><Label htmlFor="recarga">Valor (MZN)</Label><Input id="recarga" type="number" min="1" step="1" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="500" /></div><DialogFooter><Button className="surface-gold w-full" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? "A processar…" : "Confirmar recarga"}</Button></DialogFooter></DialogContent></Dialog>;
+}
 
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        mutation.mutate();
-      }}
-    >
-      <h2 className="text-xl">Perfil</h2>
-      <div className="space-y-2">
-        <Label htmlFor="p-nome">Nome completo</Label>
-        <Input id="p-nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="p-tel">Telefone</Label>
-        <Input
-          id="p-tel"
-          value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
-          placeholder="+258 84 000 0000"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="p-email">Email</Label>
-        <Input id="p-email" value={cliente.email ?? ""} disabled />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="p-nasc">Data de nascimento</Label>
-        <Input
-          id="p-nasc"
-          type="date"
-          value={nascimento}
-          onChange={(e) => setNascimento(e.target.value)}
-        />
-      </div>
-      <Button type="submit" className="surface-gold w-full" disabled={mutation.isPending}>
-        {mutation.isPending ? "A guardar…" : "Guardar alterações"}
-      </Button>
-    </form>
-  );
+function Perfil({ cliente, open, setOpen }: { cliente: Cliente; open: boolean; setOpen: (v: boolean) => void }) {
+  const qc = useQueryClient(); const [nome, setNome] = useState(cliente.nome); const [contacto, setContacto] = useState(cliente.contacto ?? "");
+  const mutation = useMutation({ mutationFn: async () => { const { error } = await supabase.from("clientes").update({ nome, contacto: contacto || null }).eq("id", cliente.id); if (error) throw error; }, onSuccess: () => { toast.success("Perfil actualizado."); setOpen(false); qc.invalidateQueries({ queryKey: ["cliente"] }); }, onError: (e: Error) => toast.error("Erro ao actualizar perfil", { description: e.message }) });
+  return <div className="card-premium max-w-2xl rounded-3xl p-5 sm:p-7"><div className="flex items-center justify-between"><div><h2 className="text-xl">Os meus dados</h2><p className="text-sm text-muted-foreground">Actualize o seu contacto quando necessário.</p></div><Button variant="outline" onClick={() => setOpen(!open)}><Pencil className="mr-2 size-4" /> Editar</Button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><div><p className="text-xs text-muted-foreground">Nome</p><p className="mt-1 font-medium">{cliente.nome}</p></div><div><p className="text-xs text-muted-foreground">Email</p><p className="mt-1 font-medium">{cliente.email || "—"}</p></div><div><p className="text-xs text-muted-foreground">Contacto</p><p className="mt-1 font-medium">{cliente.contacto || "Não definido"}</p></div><div><p className="text-xs text-muted-foreground">Membro desde</p><p className="mt-1 font-medium">{new Date(cliente.data_registo).toLocaleDateString("pt-PT")}</p></div></div>{open && <form className="mt-6 space-y-4 border-t border-border pt-6" onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}><div className="space-y-2"><Label htmlFor="perfil-nome">Nome</Label><Input id="perfil-nome" value={nome} onChange={(e) => setNome(e.target.value)} required /></div><div className="space-y-2"><Label htmlFor="perfil-contacto">Contacto</Label><Input id="perfil-contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} placeholder="+258 84 000 0000" /></div><Button type="submit" className="surface-gold w-full" disabled={mutation.isPending}>{mutation.isPending ? "A guardar…" : "Guardar alterações"}</Button></form>}</div>;
 }
