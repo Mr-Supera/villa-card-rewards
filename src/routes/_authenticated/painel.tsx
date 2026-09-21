@@ -81,7 +81,7 @@ function PainelCliente() {
     queryFn: async () => {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Sessão inválida.");
-      const { data, error } = await supabase.from("clientes").select("*").eq("id", auth.user.id).single();
+      const { data, error } = await supabase.from("clientes").select("*").or(`auth_user_id.eq.${auth.user.id},id.eq.${auth.user.id}`).limit(1).single();
       if (error) throw error;
       return data as Cliente;
     },
