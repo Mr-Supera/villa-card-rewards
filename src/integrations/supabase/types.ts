@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      cartoes: {
+        Row: {
+          cliente_id: string
+          codigo_nfc: string
+          data_emissao: string
+          estado: string
+          id: string
+        }
+        Insert: {
+          cliente_id: string
+          codigo_nfc: string
+          data_emissao?: string
+          estado?: string
+          id?: string
+        }
+        Update: {
+          cliente_id?: string
+          codigo_nfc?: string
+          data_emissao?: string
+          estado?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cartoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clientes: {
         Row: {
           ativo: boolean
@@ -240,6 +272,47 @@ export type Database = {
             columns: ["processado_por"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vantagens: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          descricao: string
+          id: string
+          nivel_minimo_id: string | null
+          nome: string
+          tipo_desconto: string
+          valor_desconto: number
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string
+          id?: string
+          nivel_minimo_id?: string | null
+          nome: string
+          tipo_desconto?: string
+          valor_desconto?: number
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string
+          id?: string
+          nivel_minimo_id?: string | null
+          nome?: string
+          tipo_desconto?: string
+          valor_desconto?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vantagens_nivel_minimo_id_fkey"
+            columns: ["nivel_minimo_id"]
+            isOneToOne: false
+            referencedRelation: "niveis_fidelidade"
             referencedColumns: ["id"]
           },
         ]
